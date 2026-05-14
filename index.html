@@ -208,10 +208,13 @@ async function getCert(domain) {
     return {
       domain,
       days: data.daysRemaining,
+      totalValidityDays: data.totalValidityDays || 0,
       validTo: data.validTo,
       validFrom: data.validFrom,
       issuer: data.issuer || "Unknown",
       subject: data.subject || domain,
+      responseTimeMs: data.responseTimeMs || 0,
+      checkedAt: data.checkedAt || new Date().toISOString(),
       serialNumber: data.serialNumber || "",
       fingerprint: data.fingerprint || "",
     };
@@ -279,9 +282,16 @@ function renderResult(r) {
 
     reportText += r.domain + ": ERROR - " + r.error + "\n\n";
   } else {
+    var responseLabel = r.responseTimeMs < 1000
+      ? r.responseTimeMs + " ms"
+      : (r.responseTimeMs / 1000).toFixed(2) + " s";
+
     html = '<div class="card ' + cls + '">' +
       "<h3>" + r.domain + ' <span class="badge ' + badgeCls + '">' + badgeText + "</span></h3>" +
+      '<div class="detail-row"><span class="detail-label">Validation Time</span><span class="detail-value">' + responseLabel + "</span></div>" +
+      '<div class="detail-row"><span class="detail-label">Checked At</span><span class="detail-value">' + formatDate(r.checkedAt) + "</span></div>" +
       '<div class="detail-row"><span class="detail-label">Days Remaining</span><span class="detail-value">' + r.days + "</span></div>" +
+      '<div class="detail-row"><span class="detail-label">Total Validity</span><span class="detail-value">' + r.totalValidityDays + " days</span></div>" +
       '<div class="detail-row"><span class="detail-label">Valid From</span><span class="detail-value">' + formatDate(r.validFrom) + "</span></div>" +
       '<div class="detail-row"><span class="detail-label">Expires</span><span class="detail-value">' + formatDate(r.validTo) + "</span></div>" +
       '<div class="detail-row"><span class="detail-label">Issuer</span><span class="detail-value">' + r.issuer + "</span></div>" +
@@ -290,11 +300,14 @@ function renderResult(r) {
       "</div>";
 
     reportText += r.domain + "\n" +
-      "  Days Remaining: " + r.days + "\n" +
-      "  Valid From:     " + formatDate(r.validFrom) + "\n" +
-      "  Expires:        " + formatDate(r.validTo) + "\n" +
-      "  Issuer:         " + r.issuer + "\n" +
-      "  Subject:        " + r.subject + "\n\n";
+      "  Validation Time: " + responseLabel + "\n" +
+      "  Checked At:      " + formatDate(r.checkedAt) + "\n" +
+      "  Days Remaining:  " + r.days + "\n" +
+      "  Total Validity:  " + r.totalValidityDays + " days\n" +
+      "  Valid From:      " + formatDate(r.validFrom) + "\n" +
+      "  Expires:         " + formatDate(r.validTo) + "\n" +
+      "  Issuer:          " + r.issuer + "\n" +
+      "  Subject:         " + r.subject + "\n\n";
   }
 
   document.getElementById("results").innerHTML += html;
