@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SSL Certificate Checker</title>
+
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+
+body{
+  font-family:'Segoe UI',system-ui,-apple-system,sans-serif;
+  max-width:900px;
+  margin:auto;
+  padding:30px 20px;
+  background:#f0f2f7;
+  color:#1e293b;
+}
+
+h1{
+  font-size:1.8rem;
+  margin-bottom:4px;
+}
+
+.subtitle{
+  color:#64748b;
+  margin-bottom:18px;
+  font-size:.95rem;
+}
+
+textarea{
+  width:100%;
+  height:140px;
+  padding:14px;
+  border-radius:10px;
+  border:1px solid #cbd5e1;
+  font-size:.95rem;
+  font-family:inherit;
+  resize:vertical;
+  background:#fff;
+}
+
+textarea:focus{
+  outline:none;
+  border-color:#2563eb;
+  box-shadow:0 0 0 3px rgba(37,99,235,.15);
+}
+
+.btn-row{
+  display:flex;
+  flex-wrap:wrap;
+  gap:8px;
+  margin:14px 0 20px;
+}
+
+button{
+  padding:10px 18px;
+  border:none;
+  border-radius:8px;
+  cursor:pointer;
+  font-weight:600;
+  font-size:.9rem;
+  transition:opacity .15s;
+}
+
+button:hover{opacity:.85}
+
+.btn-primary{background:#2563eb;color:#fff}
+.btn-secondary{background:#e2e8f0;color:#334155}
+
+#search{
+  padding:10px 14px;
+  width:100%;
+  max-width:340px;
+  border-radius:8px;
+  border:1px solid #cbd5e1;
+  font-size:.9rem;
+  margin-bottom:16px;
+}
+
+#search:focus{
+  outline:none;
+  border-color:#2563eb;
+  box-shadow:0 0 0 3px rgba(37,99,235,.15);
+}
+
+.card{
+  background:#fff;
+  padding:20px;
+  margin-bottom:14px;
+  border-radius:12px;
+  box-shadow:0 1px 6px rgba(0,0,0,.06);
+}
+
+.card h3{
+  margin-bottom:10px;
+  font-size:1.1rem;
+}
+
+.card p{
+  margin:5px 0;
+  font-size:.93rem;
+  color:#475569;
+}
+
+.card p b{color:#1e293b}
+
+.good{border-left:5px solid #16a34a}
+.warn{border-left:5px solid #f59e0b}
+.bad{border-left:5px solid #dc2626}
+.error{border-left:5px solid #94a3b8}
+
+.badge{
+  display:inline-block;
+  padding:3px 10px;
+  border-radius:20px;
+  font-size:.8rem;
+  font-weight:600;
+  margin-left:8px;
+}
+
+.badge-good{background:#dcfce7;color:#15803d}
+.badge-warn{background:#fef3c7;color:#b45309}
+.badge-bad{background:#fee2e2;color:#b91c1c}
+.badge-error{background:#f1f5f9;color:#64748b}
+
+#status{
+  font-weight:600;
+  margin:10px 0 14px;
+  color:#475569;
+}
+
+.spinner{
+  display:inline-block;
+  width:16px;height:16px;
+  border:2.5px solid #cbd5e1;
+  border-top-color:#2563eb;
+  border-radius:50%;
+  animation:spin .6s linear infinite;
+  vertical-align:middle;
+  margin-right:8px;
+}
+
+@keyframes spin{to{transform:rotate(360deg)}}
+
+.detail-row{
+  display:flex;
+  justify-content:space-between;
+  padding:4px 0;
+  border-bottom:1px solid #f1f5f9;
+}
+
+.detail-row:last-child{border-bottom:none}
+.detail-label{color:#64748b;font-size:.88rem}
+.detail-value{font-weight:600;font-size:.88rem;text-align:right}
+</style>
+</head>
+<body>
+
+<h1>SSL Certificate Checker</h1>
+<p class="subtitle">Check one or many domains — one per line or comma-separated</p>
+
+<textarea id="domains" placeholder="Enter domains, e.g.&#10;google.com&#10;github.com">google.com
+openai.com
+github.com</textarea>
+
+<div class="btn-row">
+  <button class="btn-primary" onclick="checkSSL()">Check SSL</button>
+  <button class="btn-secondary" onclick="copyResults()">Copy Results</button>
+  <button class="btn-secondary" onclick="downloadResults()">Download</button>
+  <button class="btn-secondary" onclick="shareResults()">Share</button>
+  <button class="btn-secondary" onclick="sendEmail()">Email Results</button>
+</div>
+
+<input id="search" placeholder="Filter results..." onkeyup="filterResults()" />
+
+<div id="status"></div>
+<div id="results"></div>
+
+<script>
+let reportText = "";
+
+function formatDate(isoStr) {
+  if (!isoStr) return "N/A";
+  const d = new Date(isoStr);
+  if (isNaN(d)) return "N/A";
+  return d.toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZoneName: "short",
+  });
+}
+
+async function getCert(domain) {
+  try {
+    const r = await fetch(
+      "/.netlify/functions/ssl-check?domain=" + encodeURIComponent(domain)
+    );
+    const data = await r.json();
+
+    if (!r.ok || data.error) {
+      return { domain, error: data.error || "Request failed" };
+    }
+
+    return {
+      domain,
+      days: data.daysRemaining,
+      validTo: data.validTo,
+      validFrom: data.validFrom,
+      issuer: data.issuer || "Unknown",
+      subject: data.subject || domain,
+      serialNumber: data.serialNumber || "",
+      fingerprint: data.fingerprint || "",
+    };
+  } catch (e) {
+    return { domain, error: e.message };
+  }
+}
+
+async function checkSSL() {
+  const raw = document.getElementById("domains").value;
+  const domains = raw
+    .split(/[\n,]+/)
+    .map((d) => d.trim().replace(/^https?:\/\//, "").replace(/\/.*$/, ""))
+    .filter(Boolean);
+
+  if (!domains.length) return;
+
+  const statusEl = document.getElementById("status");
+  const resultsEl = document.getElementById("results");
+
+  resultsEl.innerHTML = "";
+  reportText = "";
+
+  for (let i = 0; i < domains.length; i++) {
+    statusEl.innerHTML =
+      '<span class="spinner"></span> Checking ' +
+      domains[i] +
+      " (" + (i + 1) + "/" + domains.length + ")...";
+    const result = await getCert(domains[i]);
+    renderResult(result);
+  }
+
+  statusEl.innerHTML = "Done — " + domains.length + " domain(s) checked.";
+}
+
+function renderResult(r) {
+  let cls = "good";
+  let badgeCls = "badge-good";
+  let badgeText = "Valid";
+
+  if (r.error) {
+    cls = "error";
+    badgeCls = "badge-error";
+    badgeText = "Error";
+  } else if (r.days <= 0) {
+    cls = "bad";
+    badgeCls = "badge-bad";
+    badgeText = "Expired";
+  } else if (r.days <= 7) {
+    cls = "bad";
+    badgeCls = "badge-bad";
+    badgeText = "Critical";
+  } else if (r.days <= 30) {
+    cls = "warn";
+    badgeCls = "badge-warn";
+    badgeText = r.days + " days left";
+  }
+
+  let html = "";
+
+  if (r.error) {
+    html = '<div class="card ' + cls + '">' +
+      "<h3>" + r.domain + ' <span class="badge ' + badgeCls + '">' + badgeText + "</span></h3>" +
+      "<p>&#10060; " + r.error + "</p></div>";
+
+    reportText += r.domain + ": ERROR - " + r.error + "\n\n";
+  } else {
+    html = '<div class="card ' + cls + '">' +
+      "<h3>" + r.domain + ' <span class="badge ' + badgeCls + '">' + badgeText + "</span></h3>" +
+      '<div class="detail-row"><span class="detail-label">Days Remaining</span><span class="detail-value">' + r.days + "</span></div>" +
+      '<div class="detail-row"><span class="detail-label">Valid From</span><span class="detail-value">' + formatDate(r.validFrom) + "</span></div>" +
+      '<div class="detail-row"><span class="detail-label">Expires</span><span class="detail-value">' + formatDate(r.validTo) + "</span></div>" +
+      '<div class="detail-row"><span class="detail-label">Issuer</span><span class="detail-value">' + r.issuer + "</span></div>" +
+      '<div class="detail-row"><span class="detail-label">Subject</span><span class="detail-value">' + r.subject + "</span></div>" +
+      (r.serialNumber ? '<div class="detail-row"><span class="detail-label">Serial Number</span><span class="detail-value" style="font-size:.78rem;word-break:break-all">' + r.serialNumber + "</span></div>" : "") +
+      "</div>";
+
+    reportText += r.domain + "\n" +
+      "  Days Remaining: " + r.days + "\n" +
+      "  Valid From:     " + formatDate(r.validFrom) + "\n" +
+      "  Expires:        " + formatDate(r.validTo) + "\n" +
+      "  Issuer:         " + r.issuer + "\n" +
+      "  Subject:        " + r.subject + "\n\n";
+  }
+
+  document.getElementById("results").innerHTML += html;
+}
+
+function copyResults() {
+  if (!reportText) { alert("No results to copy. Run a check first."); return; }
+  navigator.clipboard.writeText(reportText);
+  alert("Results copied to clipboard!");
+}
+
+function downloadResults() {
+  if (!reportText) { alert("No results to download. Run a check first."); return; }
+  const blob = new Blob([reportText], { type: "text/plain" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "ssl-report.txt";
+  a.click();
+}
+
+async function shareResults() {
+  if (!reportText) { alert("No results to share. Run a check first."); return; }
+  if (navigator.share) {
+    await navigator.share({ title: "SSL Certificate Report", text: reportText });
+  } else {
+    alert("Sharing not supported in this browser. Use Copy or Download instead.");
+  }
+}
+
+function sendEmail() {
+  if (!reportText) { alert("No results to email. Run a check first."); return; }
+  window.location = "mailto:?subject=" +
+    encodeURIComponent("SSL Certificate Report") +
+    "&body=" + encodeURIComponent(reportText);
+}
+
+function filterResults() {
+  const q = document.getElementById("search").value.toLowerCase();
+  document.querySelectorAll(".card").forEach((card) => {
+    card.style.display = card.innerText.toLowerCase().includes(q) ? "block" : "none";
+  });
+}
+</script>
+
+</body>
+</html>
